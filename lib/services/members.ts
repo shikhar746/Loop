@@ -1,4 +1,5 @@
 import "server-only";
+import { randomBytes } from "node:crypto";
 import bcrypt from "bcryptjs";
 import { Prisma, type Role } from "@prisma/client";
 import { db } from "../db";
@@ -34,6 +35,39 @@ export async function signUp(input: SignupInput) {
     }, TX_OPTIONS);
   } catch (err) {
     if (isUniqueViolation(err)) throw conflict("An account with this email already exists.");
+    throw err;
+  }
+}
+
+/**
+ * Google sign-in (verified email only; the auth callback checks that).
+ * - Email already registered → sign into that account, keeping its workspace and role.
+ * - New email → create a workspace with this user as its ADMIN, like public signup.
+ * Google-only users get an unguessable random password hash, so password login stays closed for them.
+ */
+export async function findOrCreateGoogleUser(input: { email: string; name: string | null }) {
+  const email = input.email.trim().toLowerCase();
+  const existing = await db.user.findUnique({ where: { email }, select: { id: true, role: true, workspaceId: true } });
+  if (existing) return { ...existing, isNew: false };
+
+  const name = input.name?.trim().slice(0, 80) || email.split("@")[0];
+  const firstName = name.split(/\s+/)[0];
+  const passwordHash = await bcrypt.hash(randomBytes(32).toString("base64url"), BCRYPT_COST);
+  try {
+    const user = await db.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({ data: { name: `${firstName}'s workspace`.slice(0, 80) } });
+      return tx.user.create({
+        data: { name, email, passwordHash, role: "ADMIN", workspaceId: workspace.id },
+        select: { id: true, role: true, workspaceId: true },
+      });
+    }, TX_OPTIONS);
+    return { ...user, isNew: true };
+  } catch (err) {
+    // Two first-time sign-ins racing: the other one created the user, so use it.
+    if (isUniqueViolation(err)) {
+      const user = await db.user.findUnique({ where: { email }, select: { id: true, role: true, workspaceId: true } });
+      if (user) return { ...user, isNew: false };
+    }
     throw err;
   }
 }

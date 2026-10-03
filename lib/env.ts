@@ -21,6 +21,10 @@ const envSchema = z.object({
   AI_CONCURRENCY: z.coerce.number().int().min(1).max(8).default(8),
   VOYAGE_API_KEY: z.string().min(1),
   EMBEDDING_MODEL: z.string().min(1).default("voyage-3.5-lite"),
+  // Optional Google sign-in. Both must be set to enable the "Continue with Google" button.
+  // Empty strings (as copied from .env.example) mean "not configured".
+  GOOGLE_CLIENT_ID: z.string().trim().optional().transform((v) => v || undefined),
+  GOOGLE_CLIENT_SECRET: z.string().trim().optional().transform((v) => v || undefined),
   EMBEDDING_DIMENSIONS: z.coerce
     .number()
     .int()
@@ -76,3 +80,6 @@ export function readEnv(source: NodeJS.ProcessEnv = process.env): Env {
 }
 
 export const env = readEnv();
+
+/** Google OAuth is on only when both credentials are configured. */
+export const googleAuthEnabled = Boolean(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);

@@ -24,6 +24,16 @@ NextAuth v4 (credentials, JWT) · Claude (`@anthropic-ai/sdk`) or Gemini · Voya
 5. `npm run backfill`: classifies + embeds every PENDING item (batches of 8)
 6. `npm run dev`
 
+### Google sign-in (optional)
+
+1. Google Cloud Console → APIs & Services → OAuth consent screen: configure it (External, add your test users while in Testing).
+2. Credentials → Create credentials → OAuth client ID → Web application.
+3. Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google` (and `https://<your-vercel-domain>/api/auth/callback/google`).
+4. Put the client ID and secret in `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and restart. The "Continue with Google" button appears on /login and /signup.
+
+A verified Google email that matches an existing LOOP user signs into that account (same workspace and role).
+A new email gets its own workspace with that user as ADMIN, like the signup form. Google-only users have no usable password.
+
 Demo logins (password = `SEED_DEMO_PASSWORD`): `admin@loop.demo`, `analyst@loop.demo`, `viewer@loop.demo`,
 `admin@globex.demo`.
 

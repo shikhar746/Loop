@@ -15,8 +15,9 @@ import { signup, toApiError } from "@/lib/api-client";
 import { applyApiErrors } from "@/lib/form-errors";
 import { signupSchema, type SignupInput } from "@/lib/validators/auth";
 import { reveal } from "@/lib/reveal";
+import { AuthDivider, GoogleButton } from "./google-button";
 
-export function SignupForm() {
+export function SignupForm({ googleEnabled }: { googleEnabled: boolean }) {
   const router = useRouter();
   const form = useForm({
     resolver: zodResolver(signupSchema),
@@ -58,6 +59,15 @@ export function SignupForm() {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <CardContent className="space-y-4">
+            {googleEnabled && (
+              <>
+                <GoogleButton callbackUrl="/dashboard" label="Sign up with Google" />
+                <p className="text-center text-xs text-muted-foreground">
+                  New Google accounts get their own workspace; you can invite your team from Settings.
+                </p>
+                <AuthDivider />
+              </>
+            )}
             {rootError && (
               <Alert variant="destructive" aria-live="assertive">
                 <CircleAlert className="size-4" aria-hidden="true" />

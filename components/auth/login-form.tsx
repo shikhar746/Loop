@@ -13,10 +13,19 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import { loginSchema } from "@/lib/validators/auth";
 import { reveal } from "@/lib/reveal";
+import { AuthDivider, GoogleButton, oauthErrorMessage } from "./google-button";
 
 const DEMO_ACCOUNTS = ["admin@loop.demo", "analyst@loop.demo", "viewer@loop.demo"];
 
-export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
+export function LoginForm({
+  callbackUrl,
+  googleEnabled,
+  oauthError,
+}: {
+  callbackUrl: string;
+  googleEnabled: boolean;
+  oauthError?: string;
+}) {
   const router = useRouter();
   const form = useForm({
     resolver: zodResolver(loginSchema),
@@ -38,7 +47,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
     router.refresh();
   }
 
-  const rootError = form.formState.errors.root?.message;
+  const rootError = form.formState.errors.root?.message ?? (form.formState.isSubmitted ? undefined : oauthErrorMessage(oauthError));
   const r = [reveal(0), reveal(1), reveal(2)];
 
   return (
@@ -52,6 +61,12 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} noValidate>
             <CardContent className="space-y-4">
+              {googleEnabled && (
+                <>
+                  <GoogleButton callbackUrl={callbackUrl} />
+                  <AuthDivider />
+                </>
+              )}
               {rootError && (
                 <Alert variant="destructive" aria-live="assertive">
                   <CircleAlert className="size-4" aria-hidden="true" />

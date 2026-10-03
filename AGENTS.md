@@ -5,7 +5,8 @@ LOOP is a multi-tenant AI customer-feedback intelligence platform.
 ## Stack (locked; don't substitute)
 - Next.js 14.2 (App Router) + TypeScript strict + React 18.3, Tailwind CSS 3.4
 - PostgreSQL on Supabase (used only as a Postgres host) via Prisma 6, with pgvector
-- NextAuth v4 (Credentials provider, JWT sessions), bcryptjs
+- NextAuth v4 (Credentials provider + optional Google provider, JWT sessions), bcryptjs. Google users are mapped
+  onto LOOP users by verified email in the `jwt` callback (`findOrCreateGoogleUser`); no adapter, no schema change.
 - LLM: `AI_PROVIDER=anthropic` (Claude via @anthropic-ai/sdk) or `gemini` (Gemini REST via fetch, free tier,
   used for the demo since API credits are paid). Same prompts/schemas/validation in `lib/ai.ts`.
 - Voyage AI embeddings via fetch

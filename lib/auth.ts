@@ -1,9 +1,10 @@
 import "server-only";
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider, { type GoogleProfile } from "next-auth/providers/google";
 import bcrypt from "bcryptjs";
 import { db } from "./db";
-import { env } from "./env";
+import { env, googleAuthEnabled } from "./env";
 import { loginSchema } from "./validators/auth";
 
 export const BCRYPT_COST = 10;
@@ -41,9 +42,45 @@ export const authOptions: NextAuthOptions = {
         return { id: user.id, name: user.name, email: user.email, role: user.role, workspaceId: user.workspaceId };
       },
     }),
+    // Optional: enabled when GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are set.
+    ...(googleAuthEnabled
+      ? [
+          GoogleProvider({
+            clientId: env.GOOGLE_CLIENT_ID!,
+            clientSecret: env.GOOGLE_CLIENT_SECRET!,
+            // role/workspaceId are filled from the LOOP user in the jwt callback below.
+            profile: (p: GoogleProfile) => ({
+              id: p.sub,
+              name: p.name,
+              email: p.email,
+              image: p.picture,
+              role: "VIEWER" as const,
+              workspaceId: "",
+            }),
+          }),
+        ]
+      : []),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async signIn({ account, profile }) {
+      if (account?.provider !== "google") return true;
+      // Only verified Google addresses may sign in or claim an existing LOOP account with that email.
+      const google = profile as GoogleProfile | undefined;
+      if (!google?.email || !google.email_verified) return "/login?error=GoogleEmailUnverified";
+      return true;
+    },
+    async jwt({ token, user, account, profile }) {
+      if (account?.provider === "google") {
+        // Map the Google identity onto a LOOP user (existing account by email, or a new workspace).
+        const google = profile as GoogleProfile;
+        const { findOrCreateGoogleUser } = await import("./services/members");
+        const loopUser = await findOrCreateGoogleUser({ email: google.email, name: google.name ?? null });
+        token.id = loopUser.id;
+        token.sub = loopUser.id;
+        token.role = loopUser.role;
+        token.workspaceId = loopUser.workspaceId;
+        return token;
+      }
       // `user` is only present on sign-in; afterwards the token carries these claims.
       if (user) {
         token.id = user.id;
