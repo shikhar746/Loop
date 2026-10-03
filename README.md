@@ -47,6 +47,15 @@ Demo logins (password = `SEED_DEMO_PASSWORD`): `admin@loop.demo`, `analyst@loop.
 | `npm run smoke` | 28 end-to-end checks against a running server: auth, roles, tenant isolation, validation (no AI calls) |
 | `npm run typecheck` / `npm run lint` | Static checks |
 
+## Tests
+
+| Command | What it checks | Needs |
+|---|---|---|
+| `npm run typecheck` | Includes `tests/contract.types.ts`: every service's JSON output must satisfy the frontend type in `lib/types.ts` (23 endpoints) | nothing |
+| `npm test` | Vitest, 127 tests, no DB/network: every `api-client` call hits a real route + method, every route is used by the UI, UI request bodies/queries pass the backend Zod schemas, route role guards match the UI gating, api-client error handling, validators, spike rules, env parsing, Google account mapping | nothing |
+| `npm run smoke` | 28 end-to-end checks against a running server: auth, roles, tenant isolation, validation | `npm run dev` + seeded DB |
+| `npm run check` | typecheck + lint + test | nothing |
+
 `requests.http` covers every endpoint, including the isolation checks (VS Code REST Client).
 
 ## Architecture
