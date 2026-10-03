@@ -103,7 +103,7 @@ export function AppSidebar() {
             loading={signingOut}
             onClick={() => {
               setSigningOut(true);
-              void signOut({ callbackUrl: "/login" });
+              void signOut({ callbackUrl: "/" });
             }}
           >
             {!signingOut && <LogOut aria-hidden="true" />}

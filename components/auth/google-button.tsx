@@ -3,10 +3,10 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { Button } from "@/components/ui/button";
+import { GoogleLogo } from "@/components/auth/google-logo";
 
 /**
  * "Continue with Google" (NextAuth Google provider). It's a full-page redirect to Google and back.
- * lucide has no Google mark, so a typographic G stands in for the logo.
  */
 export function GoogleButton({ callbackUrl, label = "Continue with Google" }: { callbackUrl: string; label?: string }) {
   const [busy, setBusy] = useState(false);
@@ -22,11 +22,7 @@ export function GoogleButton({ callbackUrl, label = "Continue with Google" }: { 
         void signIn("google", { callbackUrl });
       }}
     >
-      {!busy && (
-        <span aria-hidden="true" className="grid size-5 place-items-center rounded-full bg-foreground font-display text-[0.8rem] font-black text-background">
-          G
-        </span>
-      )}
+      {!busy && <GoogleLogo />}
       {label}
     </Button>
   );

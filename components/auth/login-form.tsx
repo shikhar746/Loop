@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { signIn } from "next-auth/react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CircleAlert, Info, LogIn } from "lucide-react";
+import { CircleAlert, LogIn } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
@@ -14,8 +14,6 @@ import { Input } from "@/components/ui/input";
 import { loginSchema } from "@/lib/validators/auth";
 import { reveal } from "@/lib/reveal";
 import { AuthDivider, GoogleButton, oauthErrorMessage } from "./google-button";
-
-const DEMO_ACCOUNTS = ["admin@loop.demo", "analyst@loop.demo", "viewer@loop.demo"];
 
 export function LoginForm({
   callbackUrl,
@@ -48,11 +46,11 @@ export function LoginForm({
   }
 
   const rootError = form.formState.errors.root?.message ?? (form.formState.isSubmitted ? undefined : oauthErrorMessage(oauthError));
-  const r = [reveal(0), reveal(1), reveal(2)];
+  const r = reveal(0);
 
   return (
     <div className="w-full max-w-md space-y-5">
-      <Card className={r[0].className} style={r[0].style}>
+      <Card className={r.className} style={r.style}>
         <CardHeader className="space-y-2">
           <p className="eyebrow">Welcome back</p>
           <CardTitle className="display-wonk text-4xl font-black">Sign in</CardTitle>
@@ -115,23 +113,6 @@ export function LoginForm({
           </form>
         </Form>
       </Card>
-
-      <aside
-        aria-label="Demo accounts"
-        className={`surface flex gap-3 p-4 text-sm ${r[1].className}`}
-        style={r[1].style}
-      >
-        <Info className="mt-0.5 size-4 shrink-0 text-lavender" aria-hidden="true" />
-        <div className="space-y-1.5">
-          <p className="font-medium">Demo accounts</p>
-          <ul className="space-y-0.5 font-mono text-xs text-muted-foreground">
-            {DEMO_ACCOUNTS.map((email) => (
-              <li key={email}>{email}</li>
-            ))}
-          </ul>
-          <p className="text-xs text-muted-foreground">Password in README.</p>
-        </div>
-      </aside>
     </div>
   );
 }

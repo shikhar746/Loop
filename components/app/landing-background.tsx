@@ -16,7 +16,7 @@ const Topography = dynamic(() => import("@/components/reactbits/Topography"), {
 export function LandingBackground() {
   const reduced = usePrefersReducedMotion();
   return (
-    <div className="absolute inset-0 -z-10 overflow-hidden">
+    <div className="fixed inset-0 -z-10 overflow-hidden">
       <div aria-hidden="true" className="bg-atmosphere absolute inset-0" />
       <div aria-hidden="true" className="absolute inset-0">
         <Topography
