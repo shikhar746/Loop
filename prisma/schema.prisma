@@ -1,0 +1,156 @@
+// LOOP data model. Every tenant-owned table carries workspaceId; services always filter on it.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  ADMIN
+  ANALYST
+  VIEWER
+}
+
+enum Sentiment {
+  POS
+  NEU
+  NEG
+}
+
+enum FeedbackStatus {
+  NEW
+  REVIEWED
+  ACTIONED
+}
+
+enum Channel {
+  SUPPORT_TICKET
+  APP_REVIEW
+  NPS_SURVEY
+  SALES_NOTE
+  COMMUNITY
+  OTHER
+}
+
+enum ClassificationStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+model Workspace {
+  id         String      @id @default(cuid())
+  name       String
+  createdAt  DateTime    @default(now())
+  users      User[]
+  feedback   Feedback[]
+  themes     Theme[]
+  reports    Report[]
+  embeddings Embedding[]
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(VIEWER)
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt    DateTime  @default(now())
+  reports      Report[]
+
+  @@index([workspaceId])
+}
+
+model Feedback {
+  id                   String               @id @default(cuid())
+  workspaceId          String
+  workspace            Workspace            @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  content              String               @db.Text
+  channel              Channel
+  sourceRef            String?
+  customerLabel        String?
+  sentiment            Sentiment?
+  /// -1 (very negative) .. 1 (very positive)
+  sentimentScore       Float?
+  featureArea          String?
+  aiRationale          String?
+  classificationStatus ClassificationStatus @default(PENDING)
+  classifiedAt         DateTime?
+  status               FeedbackStatus       @default(NEW)
+  /// Settable on import so CSV history keeps its original dates.
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  themes               FeedbackTheme[]
+  embedding            Embedding?
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status])
+  @@index([workspaceId, channel])
+  @@index([workspaceId, sentiment])
+  @@index([workspaceId, classificationStatus])
+}
+
+model Theme {
+  id          String          @id @default(cuid())
+  workspaceId String
+  workspace   Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  color       String
+  createdAt   DateTime        @default(now())
+  feedback    FeedbackTheme[]
+
+  @@unique([workspaceId, name])
+}
+
+model FeedbackTheme {
+  feedbackId String
+  themeId    String
+  /// 0..1, how sure the classifier was that this theme applies.
+  confidence Float
+  feedback   Feedback @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  theme      Theme    @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@id([feedbackId, themeId])
+  @@index([themeId])
+}
+
+/// Written and read only through $executeRaw / $queryRaw with ::vector casts.
+/// The HNSW index on "vector" lives in a hand-written migration.
+model Embedding {
+  id          String                      @id @default(cuid())
+  feedbackId  String                      @unique
+  feedback    Feedback                    @relation(fields: [feedbackId], references: [id], onDelete: Cascade)
+  workspaceId String
+  workspace   Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  vector      Unsupported("vector(1024)")
+  model       String
+  createdAt   DateTime                    @default(now())
+
+  @@index([workspaceId])
+}
+
+model Report {
+  id            String    @id @default(cuid())
+  workspaceId   String
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  title         String
+  periodStart   DateTime
+  periodEnd     DateTime
+  /// { stats, narrative }: numbers come from stats, Claude only writes narrative.
+  contentJson   Json
+  /// Nullable so removing a member keeps the reports they generated.
+  generatedById String?
+  generatedBy   User?     @relation(fields: [generatedById], references: [id], onDelete: SetNull)
+  shareToken    String?   @unique
+  createdAt     DateTime  @default(now())
+
+  @@index([workspaceId, createdAt])
+}
