@@ -3,14 +3,14 @@
 import { useState } from "react";
 import Link from "next/link";
 import { notFound, useRouter } from "next/navigation";
-import { ArrowLeft, Printer, Trash2 } from "lucide-react";
+import { ArrowLeft, Link2, Printer, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/app/confirm-dialog";
 import { ErrorState } from "@/components/app/error-state";
 import { useMe } from "@/components/app/me-provider";
 import { PageSkeleton } from "@/components/app/page-skeleton";
-import { deleteReport, getReport, paths } from "@/lib/api-client";
+import { deleteReport, getReport, paths, shareReport } from "@/lib/api-client";
 import { useApi } from "@/lib/hooks/use-api";
 import { toastError } from "@/lib/notify";
 import { reveal } from "@/lib/reveal";
@@ -19,9 +19,10 @@ import { ReportDocument } from "./report-document";
 
 export function ReportView({ id }: { id: string }) {
   const router = useRouter();
-  const { isAdmin } = useMe();
+  const { canEdit, isAdmin } = useMe();
   const { data, error, loading, refetch } = useApi<Report>(paths.report(id), (signal) => getReport(id, signal));
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [sharing, setSharing] = useState(false);
 
   if (error?.status === 404) notFound();
   if (error && !data) return <ErrorState error={error} onRetry={() => refetch()} />;
@@ -36,6 +37,24 @@ export function ReportView({ id }: { id: string }) {
     } catch (err) {
       toastError(err);
       return false;
+    }
+  }
+
+  async function share() {
+    setSharing(true);
+    try {
+      const { sharePath } = await shareReport(id);
+      const url = `${window.location.origin}${sharePath}`;
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Share link copied. Anyone with the link can view this report.");
+      } catch {
+        toast.success("Share link ready.", { description: url });
+      }
+    } catch (err) {
+      toastError(err);
+    } finally {
+      setSharing(false);
     }
   }
 
@@ -58,6 +77,12 @@ export function ReportView({ id }: { id: string }) {
               Print / Save as PDF
             </Link>
           </Button>
+          {canEdit && (
+            <Button variant="outline" onClick={share} disabled={sharing}>
+              <Link2 aria-hidden="true" />
+              {sharing ? "Creating link…" : "Copy share link"}
+            </Button>
+          )}
           {isAdmin && (
             <Button variant="destructive" onClick={() => setConfirmOpen(true)}>
               <Trash2 aria-hidden="true" />
