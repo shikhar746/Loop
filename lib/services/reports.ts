@@ -256,7 +256,7 @@ export async function shareReport(workspaceId: string, id: string) {
   return { shareToken, sharePath: `/share/${shareToken}` };
 }
 
-/** For a future public /share/[token] page: the token is the only credential. */
+/** For the public /share/[token] page: the token is the only credential. */
 export async function getSharedReport(shareToken: string) {
   const report = await db.report.findUnique({
     where: { shareToken },
