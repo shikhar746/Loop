@@ -1,0 +1,350 @@
+# LOOP API: every endpoint, plus role and tenant-isolation checks.
+# Use with the VS Code "REST Client" extension (humao.rest-client) or JetBrains HTTP Client.
+#
+# Prereqs: npm run db:migrate && npm run seed && npm run dev
+# REST Client keeps one cookie jar, so the last "Sign in" request you ran decides who you are.
+# Run the sections top to bottom.
+
+@baseUrl = http://localhost:3000
+# Must equal SEED_DEMO_PASSWORD in .env
+@password = REPLACE_WITH_DEMO_ONLY_PASSWORD
+
+###############################################################################
+# Public
+###############################################################################
+
+### Health (SELECT 1)
+GET {{baseUrl}}/api/health
+
+### Sign up: new workspace + ADMIN in one transaction (201; 409 if the email exists)
+POST {{baseUrl}}/api/auth/signup
+Content-Type: application/json
+
+{
+  "name": "New Founder",
+  "email": "founder+{{$timestamp}}@example.com",
+  "password": "a-long-password",
+  "workspaceName": "Initech Labs"
+}
+
+### Sign up with a duplicate email → 409 CONFLICT
+POST {{baseUrl}}/api/auth/signup
+Content-Type: application/json
+
+{ "name": "Dup", "email": "admin@loop.demo", "password": "a-long-password", "workspaceName": "Dup" }
+
+### Sign up validation → 400 VALIDATION_ERROR with field details
+POST {{baseUrl}}/api/auth/signup
+Content-Type: application/json
+
+{ "name": "", "email": "not-an-email", "password": "short", "workspaceName": "" }
+
+###############################################################################
+# ISOLATION 1: no session → 401
+# (If you've signed in before, run "Sign out" at the bottom first.)
+###############################################################################
+
+### No session: GET /api/feedback → 401 UNAUTHENTICATED
+GET {{baseUrl}}/api/feedback
+
+### No session: GET /api/me → 401
+GET {{baseUrl}}/api/me
+
+###############################################################################
+# Sign in as ADMIN (admin@loop.demo, Acme Analytics)
+###############################################################################
+
+### CSRF token (sets the csrf cookie)
+# @name csrf
+GET {{baseUrl}}/api/auth/csrf
+
+### Sign in as admin@loop.demo
+POST {{baseUrl}}/api/auth/callback/credentials
+Content-Type: application/x-www-form-urlencoded
+
+csrfToken={{csrf.response.body.csrfToken}}&email=admin@loop.demo&password={{password}}&json=true
+
+### Who am I (any role)
+# @name me
+GET {{baseUrl}}/api/me
+
+### NextAuth session (shows id, role, workspaceId claims)
+GET {{baseUrl}}/api/auth/session
+
+###############################################################################
+# Members (ADMIN only)
+###############################################################################
+
+### List members
+# @name members
+GET {{baseUrl}}/api/members
+
+### Add a member
+# @name newMember
+POST {{baseUrl}}/api/members
+Content-Type: application/json
+
+{ "name": "Temp Analyst", "email": "temp+{{$timestamp}}@loop.demo", "role": "ANALYST", "tempPassword": "temp-password-123" }
+
+### Change a member's role
+PATCH {{baseUrl}}/api/members/{{newMember.response.body.id}}
+Content-Type: application/json
+
+{ "role": "VIEWER" }
+
+### Demote yourself while you're the last ADMIN → 409 CONFLICT
+PATCH {{baseUrl}}/api/members/{{me.response.body.id}}
+Content-Type: application/json
+
+{ "role": "VIEWER" }
+
+### Delete yourself → 409
+DELETE {{baseUrl}}/api/members/{{me.response.body.id}}
+
+### Remove the member added above → 204
+DELETE {{baseUrl}}/api/members/{{newMember.response.body.id}}
+
+###############################################################################
+# Feedback
+###############################################################################
+
+### List: paging + filters + full-text search (websearch syntax)
+# @name feedbackList
+GET {{baseUrl}}/api/feedback?page=1&pageSize=10&sort=newest
+
+### Filter: negative support tickets, most negative first
+GET {{baseUrl}}/api/feedback?channel=SUPPORT_TICKET&sentiment=NEG&sort=most_negative
+
+### Search: q uses websearch_to_tsquery ("quoted phrases", OR, -exclude)
+GET {{baseUrl}}/api/feedback?q=refund OR "charged twice"&pageSize=5
+
+### Date range (bare dates are inclusive whole days, UTC)
+GET {{baseUrl}}/api/feedback?from=2026-09-01&to=2026-09-30&status=NEW
+
+### Validation: pageSize over 100 → 400
+GET {{baseUrl}}/api/feedback?pageSize=1000
+
+### Create: saves, then classifies + embeds inline (201; classificationStatus=FAILED if AI is down)
+# @name created
+POST {{baseUrl}}/api/feedback
+Content-Type: application/json
+
+{
+  "content": "We were billed twice for the Growth plan this month and the invoice is missing our VAT number.",
+  "channel": "SUPPORT_TICKET",
+  "customerLabel": "Northwind Traders · Growth",
+  "sourceRef": "ZD-48213"
+}
+
+### Get one
+GET {{baseUrl}}/api/feedback/{{created.response.body.id}}
+
+### Update status / label
+PATCH {{baseUrl}}/api/feedback/{{created.response.body.id}}
+Content-Type: application/json
+
+{ "status": "REVIEWED", "customerLabel": "Northwind Traders · Business" }
+
+### Re-classify now (replaces theme links)
+POST {{baseUrl}}/api/feedback/{{created.response.body.id}}/classify
+
+### Simulate 10 realistic items (saved PENDING)
+POST {{baseUrl}}/api/feedback/simulate
+Content-Type: application/json
+
+{ "channel": "APP_REVIEW", "count": 10 }
+
+### Process the next 8 PENDING/FAILED items; repeat until remaining = 0
+POST {{baseUrl}}/api/feedback/process-pending
+
+### Import CSV (multipart). Row 3 has a bad channel, row 4 a bad date. Both come back in "errors".
+POST {{baseUrl}}/api/feedback/import
+Content-Type: multipart/form-data; boundary=LoopBoundary
+
+--LoopBoundary
+Content-Disposition: form-data; name="file"; filename="feedback.csv"
+Content-Type: text/csv
+
+content,channel,customer_label,created_at
+"The export to CSV keeps timing out on large reports",Support ticket,Contoso Health,2026-09-20
+"Can't log in with Okta since yesterday",Carrier pigeon,Fabrikam,2026-09-21
+"Love the new dashboard",NPS,Initech,not-a-date
+"App crashes when I open notifications",App review,,2026-09-22
+--LoopBoundary--
+
+### Delete
+DELETE {{baseUrl}}/api/feedback/{{created.response.body.id}}
+
+###############################################################################
+# Themes
+###############################################################################
+
+### List with item counts (optional from/to)
+# @name themes
+GET {{baseUrl}}/api/themes?from=2026-09-01
+
+### Create
+# @name newTheme
+POST {{baseUrl}}/api/themes
+Content-Type: application/json
+
+{ "name": "Security & Compliance", "description": "SOC 2, DPA, data residency", "color": "#14b8a6" }
+
+### Duplicate name → 409
+POST {{baseUrl}}/api/themes
+Content-Type: application/json
+
+{ "name": "Billing" }
+
+### Detail: sentiment mix + count + 20 latest items
+GET {{baseUrl}}/api/themes/{{themes.response.body.items[0].id}}
+
+### Update
+PATCH {{baseUrl}}/api/themes/{{newTheme.response.body.id}}
+Content-Type: application/json
+
+{ "description": "Security reviews, SOC 2, DPAs" }
+
+### Delete (ADMIN only) → 204
+DELETE {{baseUrl}}/api/themes/{{newTheme.response.body.id}}
+
+### Trends: per-theme series + current/previous/changePct/isSpiking
+GET {{baseUrl}}/api/themes/trends?period=7d&bucket=day
+
+### Trends, 90 days by week
+GET {{baseUrl}}/api/themes/trends?period=90d&bucket=week
+
+###############################################################################
+# Analytics, Ask LOOP, Reports
+###############################################################################
+
+### Dashboard aggregates (same filters as /api/feedback)
+GET {{baseUrl}}/api/analytics
+
+### Analytics filtered to one channel
+GET {{baseUrl}}/api/analytics?channel=APP_REVIEW&from=2026-09-01
+
+### Ask LOOP (any role)
+POST {{baseUrl}}/api/insights/ask
+Content-Type: application/json
+
+{ "question": "Why are customers upset about billing this week?" }
+
+### Ask LOOP: something the feedback can't answer → insufficientEvidence
+POST {{baseUrl}}/api/insights/ask
+Content-Type: application/json
+
+{ "question": "What is the capital of Australia?" }
+
+### Generate a Voice-of-Customer report (ANALYST+)
+# @name report
+POST {{baseUrl}}/api/reports
+Content-Type: application/json
+
+{ "periodStart": "2026-09-03", "periodEnd": "2026-10-03", "title": "VoC: last 30 days" }
+
+### List reports
+GET {{baseUrl}}/api/reports
+
+### Get one report
+GET {{baseUrl}}/api/reports/{{report.response.body.id}}
+
+### Create a share token (ANALYST+)
+POST {{baseUrl}}/api/reports/{{report.response.body.id}}/share
+
+### Delete report (ADMIN only) → 204
+DELETE {{baseUrl}}/api/reports/{{report.response.body.id}}
+
+###############################################################################
+# ISOLATION 2: VIEWER can read but not write → 403
+###############################################################################
+
+### CSRF
+# @name csrfViewer
+GET {{baseUrl}}/api/auth/csrf
+
+### Sign in as viewer@loop.demo
+POST {{baseUrl}}/api/auth/callback/credentials
+Content-Type: application/x-www-form-urlencoded
+
+csrfToken={{csrfViewer.response.body.csrfToken}}&email=viewer@loop.demo&password={{password}}&json=true
+
+### VIEWER GET /api/feedback → 200
+GET {{baseUrl}}/api/feedback?pageSize=3
+
+### VIEWER POST /api/feedback → 403 FORBIDDEN
+POST {{baseUrl}}/api/feedback
+Content-Type: application/json
+
+{ "content": "Viewers can't write", "channel": "OTHER" }
+
+### VIEWER POST /api/feedback/simulate → 403
+POST {{baseUrl}}/api/feedback/simulate
+Content-Type: application/json
+
+{ "channel": "SUPPORT_TICKET", "count": 5 }
+
+### VIEWER POST /api/reports → 403
+POST {{baseUrl}}/api/reports
+Content-Type: application/json
+
+{ "periodStart": "2026-09-01", "periodEnd": "2026-09-30" }
+
+### VIEWER GET /api/members → 403
+GET {{baseUrl}}/api/members
+
+### VIEWER POST /api/insights/ask → allowed (200, or 502 if AI keys aren't set)
+POST {{baseUrl}}/api/insights/ask
+Content-Type: application/json
+
+{ "question": "What do customers say about the mobile app?" }
+
+###############################################################################
+# ISOLATION 3: a Globex user reading an Acme feedback id → 404 (not 403)
+# Uses {{feedbackList}} captured while signed in as the Acme admin above.
+###############################################################################
+
+### CSRF
+# @name csrfGlobex
+GET {{baseUrl}}/api/auth/csrf
+
+### Sign in as admin@globex.demo
+POST {{baseUrl}}/api/auth/callback/credentials
+Content-Type: application/x-www-form-urlencoded
+
+csrfToken={{csrfGlobex.response.body.csrfToken}}&email=admin@globex.demo&password={{password}}&json=true
+
+### Globex GET Acme feedback → 404 NOT_FOUND
+GET {{baseUrl}}/api/feedback/{{feedbackList.response.body.items[0].id}}
+
+### Globex PATCH Acme feedback → 404
+PATCH {{baseUrl}}/api/feedback/{{feedbackList.response.body.items[0].id}}
+Content-Type: application/json
+
+{ "status": "ACTIONED" }
+
+### Globex DELETE Acme feedback → 404
+DELETE {{baseUrl}}/api/feedback/{{feedbackList.response.body.items[0].id}}
+
+### Globex re-classify Acme feedback → 404
+POST {{baseUrl}}/api/feedback/{{feedbackList.response.body.items[0].id}}/classify
+
+### Globex GET Acme theme → 404
+GET {{baseUrl}}/api/themes/{{themes.response.body.items[0].id}}
+
+### Globex list only shows Globex rows (10 seeded)
+GET {{baseUrl}}/api/feedback?pageSize=100
+
+###############################################################################
+# Sign out
+###############################################################################
+
+### CSRF
+# @name csrfOut
+GET {{baseUrl}}/api/auth/csrf
+
+### Sign out (clears the session cookie; afterwards the "no session" requests return 401)
+POST {{baseUrl}}/api/auth/signout
+Content-Type: application/x-www-form-urlencoded
+
+csrfToken={{csrfOut.response.body.csrfToken}}&json=true
