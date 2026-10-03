@@ -1,77 +1,56 @@
 # LOOP: AI customer-feedback intelligence
 
-Multi-tenant platform that ingests customer feedback (support tickets, app reviews, NPS, sales notes, community),
-classifies it with Claude (sentiment, themes, feature area), tracks theme trends and spikes, answers questions
-grounded in the feedback ("Ask LOOP"), and writes Voice-of-Customer reports.
+LOOP collects customer feedback (support tickets, app reviews, NPS, sales notes, community posts) and uses AI to
+make sense of it:
 
-**Stack:** Next.js 14.2 (App Router) · TypeScript · Tailwind 3.4 · Prisma 6 on Supabase Postgres + pgvector ·
-NextAuth v4 (credentials, JWT) · Claude (`@anthropic-ai/sdk`) or Gemini · Voyage AI embeddings · Zod · Recharts · Vercel.
+- **Auto-classification:** sentiment, themes and feature area for every item
+- **Themes & trends:** growing themes, with alerts when one spikes
+- **Ask LOOP:** plain-English questions answered with citations to the exact feedback
+- **Voice-of-Customer reports:** leadership-ready summaries you can print or share by link
 
-> **LLM provider note.** The brief specifies Claude, and the Claude integration is fully implemented in `lib/ai.ts`
-> (forced `tool_choice`, Zod-validated). Because Anthropic API credits are paid, the deployed demo runs on
-> **Google Gemini's free tier** (`AI_PROVIDER=gemini`, model `gemini-3.5-flash-lite`) through the same prompts,
-> tool schemas and validation. Switching back is one env change: `AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY`.
+Each company gets its own isolated workspace, with Admin, Analyst and Viewer roles.
 
-## Setup
+**Stack:** Next.js 14 (App Router) · TypeScript · Tailwind · Prisma + Supabase Postgres (pgvector) · NextAuth ·
+Claude or Gemini · Voyage AI embeddings · Vercel
 
-1. `npm install`
-2. Copy `.env.example` to `.env` and fill in every value (the app refuses to start while any placeholder remains):
-   - Supabase → **Connect → ORMs → Prisma**: transaction pooler (6543) → `DATABASE_URL`, session pooler (5432) → `DIRECT_URL`
-   - `openssl rand -base64 32` → `NEXTAUTH_SECRET`
-   - Anthropic and Voyage API keys, and a demo password for `SEED_DEMO_PASSWORD`
-3. `npm run db:migrate`: enables pgvector, creates tables, and adds the HNSW + full-text indexes
-4. `npm run seed`: demo workspaces "Acme Analytics" (150 items) and "Globex" (10 items), all PENDING
-5. `npm run backfill`: classifies + embeds every PENDING item (batches of 8)
-6. `npm run dev`
+> The Claude integration is fully built. The live demo runs on Gemini's free tier because Anthropic API credits
+> are paid. To switch back, set `AI_PROVIDER=anthropic` and `ANTHROPIC_API_KEY`.
 
-### Google sign-in (optional)
+## Getting started
 
-1. Google Cloud Console → APIs & Services → OAuth consent screen: configure it (External, add your test users while in Testing).
-2. Credentials → Create credentials → OAuth client ID → Web application.
-3. Authorized redirect URIs: `http://localhost:3000/api/auth/callback/google` (and `https://<your-vercel-domain>/api/auth/callback/google`).
-4. Put the client ID and secret in `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` and restart. The "Continue with Google" button appears on /login and /signup.
+```bash
+npm install
+cp .env.example .env      # fill in every value; the app won't start with placeholders left in
+npm run db:migrate        # tables, pgvector, search indexes
+npm run seed              # demo workspaces with sample feedback
+npm run backfill          # classify + embed the sample feedback
+npm run dev               # http://localhost:3000
+```
 
-A verified Google email that matches an existing LOOP user signs into that account (same workspace and role).
-A new email gets its own workspace with that user as ADMIN, like the signup form. Google-only users have no usable password.
+Demo logins: `admin@loop.demo`, `analyst@loop.demo`, `viewer@loop.demo`, all using the password you set in
+`SEED_DEMO_PASSWORD`.
 
-Demo logins (password = `SEED_DEMO_PASSWORD`): `admin@loop.demo`, `analyst@loop.demo`, `viewer@loop.demo`,
-`admin@globex.demo`.
-
-## Scripts
-
-| Script | What it does |
-|---|---|
-| `npm run db:migrate` | `prisma migrate deploy` (no shadow DB needed) |
-| `npm run seed` | Idempotent demo data |
-| `npm run backfill` | Classify + embed all PENDING/FAILED feedback |
-| `npm run smoke` | 28 end-to-end checks against a running server: auth, roles, tenant isolation, validation (no AI calls) |
-| `npm run typecheck` / `npm run lint` | Static checks |
-
-## Tests
-
-| Command | What it checks | Needs |
-|---|---|---|
-| `npm run typecheck` | Includes `tests/contract.types.ts`: every service's JSON output must satisfy the frontend type in `lib/types.ts` (23 endpoints) | nothing |
-| `npm test` | Vitest, 127 tests, no DB/network: every `api-client` call hits a real route + method, every route is used by the UI, UI request bodies/queries pass the backend Zod schemas, route role guards match the UI gating, api-client error handling, validators, spike rules, env parsing, Google account mapping | nothing |
-| `npm run smoke` | 28 end-to-end checks against a running server: auth, roles, tenant isolation, validation | `npm run dev` + seeded DB |
-| `npm run check` | typecheck + lint + test | nothing |
-
-`requests.http` covers every endpoint, including the isolation checks (VS Code REST Client).
-
-## Architecture
-
-- `app/api/**/route.ts`: thin handlers: Zod parse → `requireSession`/`requireRole` → service → JSON.
-- `lib/services/*`: all business logic; every function takes `workspaceId` first.
-- `lib/guards.ts`: session from the JWT, then the user is re-read from the DB on each request.
-- `lib/http.ts`: `withHandler` maps errors to `{ error: { code, message, details? } }`.
-- `lib/ai.ts`: Claude calls with forced tool use + Zod validation (one retry); prompts are documented constants.
-- `lib/search.ts`: Voyage embeddings + pgvector cosine search, always filtered by workspace.
-- `middleware.ts`: JWT-only page protection (Edge); API routes enforce auth themselves.
+**Google sign-in (optional):** create an OAuth client in Google Cloud Console with the redirect URI
+`<NEXTAUTH_URL>/api/auth/callback/google`, then set `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 ## Roles
 
-| | VIEWER | ANALYST | ADMIN |
-|---|---|---|---|
-| Read everything, Ask LOOP | ✓ | ✓ | ✓ |
-| Ingest / edit / classify feedback, manage themes, generate + share reports | | ✓ | ✓ |
-| Members, delete themes and reports | | | ✓ |
+| | Viewer | Analyst | Admin |
+|---|:-:|:-:|:-:|
+| View dashboards, Ask LOOP | ✓ | ✓ | ✓ |
+| Add/edit feedback, manage themes, create and share reports | | ✓ | ✓ |
+| Manage members, delete themes and reports | | | ✓ |
+
+## Checks
+
+```bash
+npm run check   # typecheck + lint + unit tests (no DB or network needed)
+npm run smoke   # end-to-end checks against a running, seeded server
+```
+
+## Project layout
+
+- `app/api/**`: thin route handlers (validate → check role → call service)
+- `lib/services/*`: all business logic, always scoped to a workspace
+- `lib/ai.ts`: prompts and AI calls (Claude or Gemini), validated with Zod
+- `prisma/`: schema, migrations, seed data
