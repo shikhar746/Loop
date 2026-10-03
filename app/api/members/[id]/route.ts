@@ -10,7 +10,7 @@ export const PATCH = withHandler<{ id: string }>(async (req, { params }) => {
   const ctx = await requireRole("ADMIN");
   const { id } = parseParams(params, idParamSchema);
   const input = await parseJson(req, updateMemberSchema);
-  return json(await updateMemberRole(ctx.workspaceId, id, input));
+  return json(await updateMemberRole(ctx.workspaceId, ctx.userId, id, input));
 });
 
 export const DELETE = withHandler<{ id: string }>(async (_req, { params }) => {

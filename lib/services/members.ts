@@ -100,9 +100,14 @@ export async function createMember(workspaceId: string, input: CreateMemberInput
 
 export async function updateMemberRole(
   workspaceId: string,
+  actingUserId: string,
   memberId: string,
   input: UpdateMemberInput,
 ): Promise<Member> {
+  // Mirrors deleteMember: admins can't change their own role (the Settings UI hides this too).
+  if (memberId === actingUserId) {
+    throw new AppError(409, "CONFLICT", "You can't change your own role. Ask another admin to do it.");
+  }
   return db.$transaction(
     async (tx) => {
       const member = await tx.user.findFirst({ where: { id: memberId, workspaceId }, select: memberSelect });

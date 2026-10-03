@@ -138,12 +138,12 @@ async function main() {
   const reports = await call("GET", "/api/reports", viewer);
   check("viewer: GET /api/reports → 200", reports.status === 200);
 
-  // Members: last admin can't be demoted
+  // Members: admins can't change their own role or remove themselves (this also keeps the last admin)
   const members = await call("GET", "/api/members", admin);
   const adminRow = (members.data as { items: Json[] }).items.find((m) => m.email === "admin@loop.demo");
   check("admin: GET /api/members → 200", members.status === 200 && !!adminRow);
   const demote = await call("PATCH", `/api/members/${String(adminRow?.id)}`, admin, { role: "VIEWER" });
-  check("admin: demoting the last ADMIN → 409 CONFLICT", demote.status === 409 && errCode(demote.data) === "CONFLICT", `got ${demote.status}`);
+  check("admin: changing your own role → 409 CONFLICT", demote.status === 409 && errCode(demote.data) === "CONFLICT", `got ${demote.status}`);
   const deleteSelf = await call("DELETE", `/api/members/${String(adminRow?.id)}`, admin);
   check("admin: deleting yourself → 409", deleteSelf.status === 409, `got ${deleteSelf.status}`);
 
