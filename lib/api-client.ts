@@ -250,5 +250,6 @@ export const getReport = (id: string, signal?: AbortSignal) => request<Report>(p
 /** #30 DELETE /api/reports/[id] */
 export const deleteReport = (id: string) => request<void>(paths.report(id), { method: "DELETE" });
 
-// API-GAP: #31 POST /api/reports/[id]/share mints a share token, but there is no public read endpoint
-// (e.g. GET /api/share/[token]) or /share/[token] page, so a share link would 404. Not wired in the UI.
+/** #31 POST /api/reports/[id]/share: returns the public read-only path, /share/[token]. */
+export const shareReport = (id: string) =>
+  request<{ shareToken: string; sharePath: string }>(`${paths.report(id)}/share`, { method: "POST" });
